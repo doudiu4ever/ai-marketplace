@@ -1,0 +1,16 @@
+{
+  "name": "ai-marketplace",
+  "owner": {
+    "name": "chengy"
+  },
+  "plugins": [
+    {
+      "name": "dev-tool",
+      "source": "./plugins/dev-tool",
+      "description": "开发流程与多 agent 文档协作工具，涵盖需求确认、实现审核和文档规范。"
+    }
+  ],
+  "metadata": {
+    "description": "个人常用 skill 集合，支持 Claude Code 和 Codex 插件安装。"
+  }
+}
