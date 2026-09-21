@@ -31,4 +31,4 @@ codex plugin add dev-tool@ai-marketplace
 
 安装后可直接要求“使用 requirements-to-review 流程”或“使用 multi-agent-docs 整理文档”。Claude Code 也可输入 `/dev-tool:requirements-to-review` 或 `/dev-tool:multi-agent-docs`。
 
-`requirements-to-review` 的自动审核需要安装并配置 Codex CLI，包括在 Claude Code 中使用时。
+`requirements-to-review` 默认使用当前客户端可用的独立审核能力：Claude Code 可使用只读 reviewer，Codex 可使用 review 功能；也可指定审核工具或手动审核方式。
