@@ -1,6 +1,6 @@
 {
   "name": "dev-tool",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "开发流程与多 agent 文档协作工具，涵盖需求确认、实现审核和文档规范。",
   "author": {
     "name": "chengy"
