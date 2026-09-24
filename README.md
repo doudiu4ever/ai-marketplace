@@ -20,6 +20,28 @@ codex plugin marketplace add https://github.com/doudiu4ever/ai-marketplace.git
 codex plugin add dev-tool@ai-marketplace
 ```
 
+## 更新
+
+已按上述方式安装后，在终端先刷新 marketplace，再更新插件。
+
+### Claude Code
+
+```bash
+claude plugin marketplace update ai-marketplace
+claude plugin update dev-tool@ai-marketplace
+```
+
+更新后重启 Claude Code。
+
+### Codex
+
+```bash
+codex plugin marketplace upgrade ai-marketplace
+codex plugin add dev-tool@ai-marketplace
+```
+
+`upgrade` 刷新 marketplace 的 Git 快照，再用 `add` 安装其中的新版插件。更新后开启新会话。
+
 ## 组件
 
 ### dev-tool
