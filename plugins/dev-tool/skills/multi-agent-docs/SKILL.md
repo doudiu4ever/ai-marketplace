@@ -29,10 +29,13 @@ This skill encodes the boundary rules that keep such a repo coherent.
 Split every project doc into exactly one of two tiers, and treat the tier as the
 thing that decides what may reference what.
 
-- **Entry docs (per-agent):** `CLAUDE.md`, `AGENTS.md`, and any future
-  `<TOOL>.md`. One per agent. Short. They are the *only* place tool-specific
-  behavior belongs. Each agent reads exactly one of these and treats it as the
-  front door.
+- **Entry docs (per entry filename):** `CLAUDE.md`, `AGENTS.md`, and any future
+  `<TOOL>.md`. One per distinct entry filename — when multiple agents natively
+  read the same entry file (for example, Codex and Antigravity both read
+  `AGENTS.md`), preserve that single shared entry file instead of creating a
+  duplicate (such as `GEMINI.md`), especially when a tool loads multiple entry
+  files cumulatively. Short. They are the *only* place tool-specific behavior
+  belongs. Each agent reads its entry file and treats it as the front door.
 - **Shared docs (project detail):** every other doc in the repo — design specs,
   environment/setup notes, README, architecture notes, backlog: the actual
   project material. **Their exact set and filenames are project-specific** —
@@ -42,9 +45,10 @@ thing that decides what may reference what.
   they must read identically no matter which agent opened them.
 
 Note on filenames: the **entry docs** are fixed by the tools themselves
-(`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex, `<TOOL>.md` for others), so
-this skill names them directly. The **shared docs** are whatever this project
-happens to call them — identify them per repo rather than expecting a fixed list.
+(`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex and Antigravity, `<TOOL>.md`
+for others), so this skill names them directly. The **shared docs** are whatever
+this project happens to call them — identify them per repo rather than expecting
+a fixed list.
 
 The entry docs are thin routers; the shared docs are the substance. Keep design
 and progress detail out of entry docs and in shared docs, so there is a single
@@ -81,14 +85,22 @@ agent joins — and it reads slightly wrong to whichever agent isn't named. Use
 "agent", "the coding agent", "code review", etc. Capability-based phrasing beats
 identity-based phrasing for the same reason (see Rule 4).
 
-## Rule 3 — Keep entry docs mirrored
+## Rule 3 — Keep alternative entry docs mirrored
 
-The per-agent entry docs should carry the *same* project-facing rules, so an
-agent's behavior doesn't depend on which front door it came through. Treat them
-as mirror images: when you change a rule in one, make the matching change in the
+When a project maintains two or more alternative entry docs (for example,
+`CLAUDE.md` for Claude Code and `AGENTS.md` for Codex / Antigravity), they
+should carry the *same* project-facing rules so an agent's behavior doesn't
+depend on which front door it came through. Treat alternative entry docs as
+mirror images: when you change a rule in one, make the matching change in the
 others in the same edit.
 
-The only legitimate differences between two entry docs are:
+Do **not** mirror a cumulatively loaded supplement file onto the primary entry
+file. For example, if a project keeps shared rules in `AGENTS.md` and also uses
+`GEMINI.md` for Antigravity-only extras, Antigravity loads both — keep
+`GEMINI.md` limited to its additional rules so shared rules are not duplicated
+in Antigravity and tool-specific rules do not leak into Codex.
+
+The only legitimate differences between two mirrored entry docs are:
 
 1. The title / first line that identifies the tool ("Claude Code entry
    guidance" vs "Codex entry guidance").
@@ -98,8 +110,8 @@ The only legitimate differences between two entry docs are:
 
 Everything else — non-negotiables, architecture boundaries, verification
 commands — should be byte-for-byte identical. A quick check: strip the lines that
-mention the entry-doc filenames, then diff the two files; what's left should match
-except for the title/first-line.
+mention the entry-doc filenames, then diff the mirrored files; what's left
+should match except for the title/first-line.
 
 ## Rule 4 — Constraints follow capability, not machine/tool identity
 
@@ -126,31 +138,52 @@ should be coming *from* an entry doc, never from a shared doc).
 
 ## How to audit an existing repo
 
-First identify the two tiers for *this* repo, then run the checks. The entry
-docs are the tool files that exist (`CLAUDE.md`, `AGENTS.md`, …); the shared docs
-are every other doc this project keeps.
+First identify the two tiers for *this* repo, then run the checks. List the
+alternative entry docs the project expects (`CLAUDE.md`, `AGENTS.md`, …) and any
+cumulatively loaded tool supplements (such as `GEMINI.md` alongside `AGENTS.md`)
+separately from the shared docs.
 
 ```bash
-# Name the tiers for this repo. ENTRY is a regex; SHARED is the file list.
-ENTRY='CLAUDE\.md|AGENTS\.md'                 # add more <TOOL>.md as they appear
-SHARED=$(git ls-files '*.md' | grep -vE "$ENTRY")   # tune the glob to the repo
+# Declare the expected alternative entry docs for this repo (e.g., (CLAUDE.md AGENTS.md),
+# or (AGENTS.md) if all supported agents share AGENTS.md).
+ENTRY_FILES=(CLAUDE.md AGENTS.md)
+# Include any cumulatively loaded supplement filenames (e.g., |GEMINI\.md) in ENTRY
+# so Rule 1 checks shared docs cleanly without mirroring supplements in Rule 3.
+ENTRY='CLAUDE\.md|AGENTS\.md'
+SHARED=$(git ls-files '*.md' | grep -vE "$ENTRY") # tune the glob to the repo
+
+# Existence check: report any missing expected entry doc instead of silently skipping it.
+missing=0
+for f in "${ENTRY_FILES[@]}"; do
+  if [ ! -f "$f" ]; then
+    echo "Missing expected entry doc: $f" >&2
+    missing=1
+  fi
+done
+[ "$missing" -eq 0 ] || exit 1
 
 # Rule 1: shared docs must not name entry docs. Expect no hits.
 grep -nE "$ENTRY" $SHARED 2>/dev/null
 
 # Rule 2: shared docs should be tool-neutral. Inspect any hits.
-grep -nE 'Claude|Codex|Copilot|Cursor|Gemini' $SHARED 2>/dev/null
+grep -nE 'Claude|Codex|Copilot|Cursor|Gemini|Antigravity|\bagy\b' $SHARED 2>/dev/null
 
-# Rule 3: entry docs mirror each other. After stripping the lines that name the
-# entry files, the remainder should differ only in the title / first line.
-diff \
-  <(grep -vE "$ENTRY" CLAUDE.md) \
-  <(grep -vE "$ENTRY" AGENTS.md)
+# Rule 3: when the expected layout has 2+ alternative entry docs, verify they
+# mirror each other. Skip only when the expected layout has a single shared entry.
+# After stripping lines that name the entry files, each pair should differ
+# only in the title / first line.
+if [ "${#ENTRY_FILES[@]}" -ge 2 ]; then
+  for other in "${ENTRY_FILES[@]:1}"; do
+    diff \
+      <(grep -vE "$ENTRY" "${ENTRY_FILES[0]}") \
+      <(grep -vE "$ENTRY" "$other")
+  done
+fi
 ```
 
-The entry docs might be `CLAUDE.md` + `AGENTS.md` today and grow a third
-tomorrow; the shared-doc set is whatever the project actually has, so derive it
-(as above) instead of hardcoding names.
+The expected alternative entry docs might be a single shared `AGENTS.md`,
+`CLAUDE.md` + `AGENTS.md`, or grow a third later; the shared-doc set is whatever
+the project actually has, so derive it (as above) instead of hardcoding names.
 
 ## Recommended entry-doc skeleton
 
@@ -164,7 +197,7 @@ Keep each entry doc short and uniform. A workable shape:
 ## Read Order
 - `<your-design-doc>.md`: <what's in it>
 - `<your-setup-doc>.md`: <what's in it>
-- `AGENTS.md`: <sibling entry doc; keep rules aligned with this file>
+- `<sibling-entry-doc>.md`: <only when a second alternative entry doc exists; keep rules aligned with this file>
 
 ## Project Snapshot
 <2–3 lines: stack + current state>
@@ -173,7 +206,8 @@ Keep each entry doc short and uniform. A workable shape:
 - <rules that must hold; phrase constraints by capability, not machine name>
 
 ## Documentation Sync
-- Mirror agent-facing guidance between the entry docs.
+- Mirror agent-facing guidance across alternative entry docs (when 2+ exist);
+  keep any cumulatively loaded supplement limited to its extra tool-specific rules.
 - Put detailed design/progress in shared docs, not here.
 - One-way dependency: entry docs may point into shared docs; shared docs must
   not back-reference an entry doc. Tool-specific differences live only here.
@@ -182,8 +216,12 @@ Keep each entry doc short and uniform. A workable shape:
 <commands every agent can run; note what needs out-of-environment verification>
 ```
 
-The sibling entry doc (`AGENTS.md`) is the same file with the title, first line,
-and self-ordering flipped.
+When a second alternative entry doc exists (for example, `AGENTS.md` alongside
+`CLAUDE.md`), keep them identical apart from the title, first line, and
+self-ordering. Do not mirror a cumulatively loaded supplement file (such as an
+Antigravity-only `GEMINI.md` alongside `AGENTS.md`) — keep it limited to its
+additional rules. When all agents share one entry file (such as `AGENTS.md`
+alone), omit the sibling bullet.
 
 ## Quick checklist
 
@@ -191,6 +229,6 @@ Before finishing any doc edit in a multi-agent repo:
 
 - [ ] No shared doc names an entry doc (Rule 1).
 - [ ] No shared doc names a single tool where a role word fits (Rule 2).
-- [ ] Entry docs still mirror each other apart from title / self-ordering (Rule 3).
+- [ ] All expected alternative entry docs exist and mirror each other apart from title / self-ordering, while any cumulatively loaded supplement stays limited to extra tool-specific rules (Rule 3).
 - [ ] Environment constraints are phrased by capability, not machine/tool (Rule 4).
 - [ ] Any rule change touched all affected docs in this same edit (Rule 5).

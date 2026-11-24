@@ -1,0 +1,15 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "dev-tool",
+  "displayName": "Dev Tool",
+  "version": "0.2.4",
+  "description": "开发流程与多 agent 文档协作工具，涵盖需求确认、实现审核和文档规范。",
+  "author": {
+    "name": "chengy"
+  },
+  "repository": "https://github.com/doudiu4ever/ai-marketplace",
+  "suggestedPrompts": [
+    "使用 requirements-to-review 流程推进当前需求",
+    "使用 multi-agent-docs 整理项目协作文档"
+  ]
+}
